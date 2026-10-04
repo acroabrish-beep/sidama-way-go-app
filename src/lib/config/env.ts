@@ -44,3 +44,8 @@ export function validateEnv() {
 
   console.log('Environment configuration validated successfully');
 }
+
+// Automatically validate on import
+if (typeof window === 'undefined') {
+  validateEnv();
+}

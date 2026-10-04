@@ -1,0 +1,9 @@
+- `[x]` Research existing environment configuration and variable names
+- `[x]` Create `.env.local` with provided Supabase Project URL and anon key
+- `[x]` Implement explicit validation in `src/lib/config/env.ts` and `src/lib/supabase/client.ts`
+- `[x]` Ensure `validateEnv()` is invoked on module import
+- `[x]` Verify `.env.local` is ignored in `.gitignore`
+- `[ ]` Restart Next.js server and verify startup
+- `[ ]` Verify root endpoint (http://localhost:3000) returns 200
+- `[ ]` Verify `/api/auth/sync` no longer fails due to missing configuration
+- `[ ]` Final report generation

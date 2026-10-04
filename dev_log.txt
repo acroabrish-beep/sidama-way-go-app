@@ -1,0 +1,12 @@
+
+> sidama_way_go_backend@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.11 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.100.47:3000
+- Environments: .env.local
+✓ Ready in 748ms
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead. Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+
+^C^C
