@@ -540,11 +540,26 @@ CREATE TABLE location_history (
   recorded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Citizen Reports (for citizen reporting feature)
+CREATE TABLE citizen_reports (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  reporter_firebase_uid VARCHAR(255) NOT NULL REFERENCES users(firebase_uid),
+  category VARCHAR(50) NOT NULL CHECK (category IN ('pothole', 'garbage', 'street_light', 'water', 'other')),
+  description TEXT,
+  photo_url TEXT,
+  latitude DOUBLE PRECISION NOT NULL,
+  longitude DOUBLE PRECISION NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'in_progress', 'resolved')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Soft delete support
 ALTER TABLE users ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE vehicles ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE trips ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE payments ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE citizen_reports ADD COLUMN deleted_at TIMESTAMP WITH TIME ZONE;
 
 -- Create indexes for better performance
 CREATE INDEX idx_users_firebase_uid ON users(firebase_uid);
@@ -582,6 +597,10 @@ CREATE INDEX idx_revenue_tracking_entity ON revenue_tracking(entity_type, entity
 CREATE INDEX idx_revenue_tracking_period ON revenue_tracking(period_type, period_start);
 CREATE INDEX idx_location_history_entity ON location_history(entity_type, entity_id);
 CREATE INDEX idx_location_history_recorded_at ON location_history(recorded_at);
+CREATE INDEX idx_citizen_reports_reporter_firebase_uid ON citizen_reports(reporter_firebase_uid);
+CREATE INDEX idx_citizen_reports_status ON citizen_reports(status);
+CREATE INDEX idx_citizen_reports_category ON citizen_reports(category);
+CREATE INDEX idx_citizen_reports_created_at ON citizen_reports(created_at);
 
 -- Enable Row Level Security
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
@@ -591,6 +610,7 @@ ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE payments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE wallet_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE emergency_requests ENABLE ROW LEVEL SECURITY;
+ALTER TABLE citizen_reports ENABLE ROW LEVEL SECURITY;
 
 -- Create RLS policies
 -- Users can view own profile
@@ -622,6 +642,9 @@ CREATE POLICY "Service role can manage wallet transactions" ON wallet_transactio
 CREATE POLICY "Users can view own emergency requests" ON emergency_requests FOR SELECT USING (user_id IN (SELECT id FROM users WHERE firebase_uid = auth.uid()));
 CREATE POLICY "Emergency responders can view assigned requests" ON emergency_requests FOR SELECT USING (assigned_unit_id IN (SELECT id FROM vehicles WHERE driver_id IN (SELECT id FROM users WHERE firebase_uid = auth.uid())));
 CREATE POLICY "Service role can manage emergency requests" ON emergency_requests FOR ALL USING (auth.role() = 'service_role');
+
+-- Authorization (users can only see/create their own reports) is enforced in the Next.js API layer (service role bypasses RLS by design), not via RLS, since this project uses Firebase Auth rather than Supabase Auth.
+CREATE POLICY "Service role can manage citizen reports" ON citizen_reports FOR ALL USING (auth.role() = 'service_role');
 
 -- Functions for automatic timestamp updates
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -659,6 +682,7 @@ CREATE TRIGGER update_system_config_updated_at BEFORE UPDATE ON system_config FO
 CREATE TRIGGER update_refund_requests_updated_at BEFORE UPDATE ON refund_requests FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_support_tickets_updated_at BEFORE UPDATE ON support_tickets FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_promotions_updated_at BEFORE UPDATE ON promotions FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_citizen_reports_updated_at BEFORE UPDATE ON citizen_reports FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- Apply soft delete triggers
 CREATE TRIGGER soft_delete_users BEFORE DELETE ON users FOR EACH ROW EXECUTE FUNCTION soft_delete();

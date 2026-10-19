@@ -2,11 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { supabase } from '@/lib/supabase/client';
 import { env } from '@/lib/config/env';
+import { requireCallerWithEnforce } from '@/lib/auth/verify';
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(env.geminiApiKey);
 
 export async function POST(request: NextRequest) {
+  // Auth check: any valid caller
+  const authResult = await requireCallerWithEnforce(request, {
+    route: '/api/gemini',
+    method: 'POST',
+  });
+
+  if (!authResult.ok) {
+    return NextResponse.json(
+      { error: authResult.error },
+      { status: authResult.status }
+    );
+  }
+
   try {
     const body = await request.json();
     const { message, history = [], language = 'en', location, role } = body;
@@ -54,10 +68,13 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Gemini API Error:', error);
+    const body = await request.clone().json().catch(() => ({}));
+    const fallbackMessage = body.message || 'unknown';
+    const fallbackLanguage = body.language || 'en';
     return NextResponse.json(
       { 
         error: 'Failed to process AI request',
-        fallback: getFallbackResponse(message, language),
+        fallback: getFallbackResponse(fallbackMessage, fallbackLanguage),
       },
       { status: 500 }
     );

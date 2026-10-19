@@ -1,14 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
+import { requireCallerWithEnforce } from '@/lib/auth/verify';
 
 // Generic data API endpoint for all Supabase queries
 // Usage: /api/data/table_name or /api/data/table_name/id
 export async function GET(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
+  // Auth check: any valid caller
+  const authResult = await requireCallerWithEnforce(request, {
+    route: '/api/data/[...path]',
+    method: 'GET',
+  });
+
+  if (!authResult.ok) {
+    return NextResponse.json(
+      { error: authResult.error },
+      { status: authResult.status }
+    );
+  }
+
   try {
-    const [table, id] = params.path;
+    const { path } = await params;
+    const [table, id] = path;
     const searchParams = request.nextUrl.searchParams;
 
     if (!table) {
@@ -51,10 +66,12 @@ export async function GET(
       query = query.limit(parseInt(limit));
     }
 
-    // Add offset
+    // Add offset (Supabase uses range for pagination)
     const offset = searchParams.get('offset');
     if (offset) {
-      query = query.offset(parseInt(offset));
+      const offsetNum = parseInt(offset);
+      const limitNum = limit ? parseInt(limit) : 10;
+      query = query.range(offsetNum, offsetNum + limitNum - 1);
     }
 
     // Add ordering
@@ -66,7 +83,21 @@ export async function GET(
 
     // If ID is provided, get single record
     if (id) {
-      query = query.eq('id', id).single();
+      const { data: singleData, error: singleError } = await supabase
+        .from(table)
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (singleError) {
+        console.error(`Error fetching single record from ${table}:`, singleError);
+        return NextResponse.json(
+          { error: singleError.message },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({ data: singleData });
     }
 
     const { data, error } = await query;
@@ -92,10 +123,24 @@ export async function GET(
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
+  // Auth check: any valid caller
+  const authResult = await requireCallerWithEnforce(request, {
+    route: '/api/data/[...path]',
+    method: 'POST',
+  });
+
+  if (!authResult.ok) {
+    return NextResponse.json(
+      { error: authResult.error },
+      { status: authResult.status }
+    );
+  }
+
   try {
-    const [table] = params.path;
+    const { path } = await params;
+    const [table] = path;
 
     if (!table) {
       return NextResponse.json(
@@ -150,10 +195,24 @@ export async function POST(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
+  // Auth check: any valid caller
+  const authResult = await requireCallerWithEnforce(request, {
+    route: '/api/data/[...path]',
+    method: 'PATCH',
+  });
+
+  if (!authResult.ok) {
+    return NextResponse.json(
+      { error: authResult.error },
+      { status: authResult.status }
+    );
+  }
+
   try {
-    const [table, id] = params.path;
+    const { path } = await params;
+    const [table, id] = path;
 
     if (!table || !id) {
       return NextResponse.json(
@@ -209,10 +268,24 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { path: string[] } }
+  { params }: { params: Promise<{ path: string[] }> }
 ) {
+  // Auth check: any valid caller
+  const authResult = await requireCallerWithEnforce(request, {
+    route: '/api/data/[...path]',
+    method: 'DELETE',
+  });
+
+  if (!authResult.ok) {
+    return NextResponse.json(
+      { error: authResult.error },
+      { status: authResult.status }
+    );
+  }
+
   try {
-    const [table, id] = params.path;
+    const { path } = await params;
+    const [table, id] = path;
 
     if (!table || !id) {
       return NextResponse.json(

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { supabase } from '@/lib/supabase/client';
 import { env } from '@/lib/config/env';
+import { Content } from '@google/generative-ai';
 
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(env.geminiApiKey);
@@ -89,17 +90,18 @@ export async function POST(request: NextRequest) {
     // Initialize the model with system instruction
     const model = genAI.getGenerativeModel({ 
       model: 'gemini-1.5-flash',
-      systemInstruction: Content.system(systemPrompt),
+      systemInstruction: { text: systemPrompt },
     });
 
     // Start chat session
     const chatSession = model.startChat({ history: combinedHistory });
     
     // Send message and get response
-    const result = await chatSession.sendMessage(Content.text(message));
+    const result = await chatSession.sendMessage(message);
     const response = result.response;
 
-    if (!response.text()) {
+    const responseText = response.text();
+    if (!responseText) {
       throw new Error('Empty response from Gemini');
     }
 
@@ -111,13 +113,13 @@ export async function POST(request: NextRequest) {
     });
     cleanMemory.push({
       role: 'model',
-      content: response.text!,
+      content: responseText,
       timestamp: now
     });
     conversationMemory.set(sessionId || 'default', cleanMemory);
 
     return NextResponse.json({
-      response: response.text,
+      response: responseText,
       timestamp: new Date().toISOString(),
       context: {
         cityDataSummary: {
@@ -131,10 +133,13 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Gemini API Error:', error);
+    const body = await request.clone().json().catch(() => ({}));
+    const fallbackMessage = body.message || 'unknown';
+    const fallbackLanguage = body.language || 'en';
     return NextResponse.json(
       { 
         error: 'Failed to process AI request',
-        fallback: getFallbackResponse(message, language),
+        fallback: getFallbackResponse(fallbackMessage, fallbackLanguage),
       },
       { status: 500 }
     );

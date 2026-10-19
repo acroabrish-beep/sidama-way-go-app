@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
+import { requireCallerWithEnforce } from "@/lib/auth/verify";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -116,6 +117,20 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Auth check: caller.uid must equal firebaseUid
+  const authResult = await requireCallerWithEnforce(req, {
+    uid: firebaseUid,
+    route: '/api/auth/sync',
+    method: 'GET',
+  });
+
+  if (!authResult.ok) {
+    return NextResponse.json(
+      { error: authResult.error },
+      { status: authResult.status }
+    );
+  }
+
   const { data, error } = await supabase
     .from("users")
     .select("*")
@@ -145,6 +160,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       { error: "firebaseUid is required" },
       { status: 400 }
+    );
+  }
+
+  // Auth check: caller.uid must equal firebaseUid
+  const authResult = await requireCallerWithEnforce(req, {
+    uid: payload.firebaseUid,
+    route: '/api/auth/sync',
+    method: 'POST',
+  });
+
+  if (!authResult.ok) {
+    return NextResponse.json(
+      { error: authResult.error },
+      { status: authResult.status }
     );
   }
 

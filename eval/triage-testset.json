@@ -1,0 +1,325 @@
+{
+  "note": "This is synthetic test data for AI triage evaluation. Amharic and Sidaamu Afoo samples are machine-written and MUST be reviewed by a native speaker before being quoted in any report.",
+  "samples": [
+    {
+      "id": 1,
+      "description": "There is a large pothole on Main Street near the market. Cars are swerving to avoid it.",
+      "category": "pothole",
+      "expectedCategory": "pothole",
+      "expectedUrgency": "medium",
+      "language": "en"
+    },
+    {
+      "id": 2,
+      "description": "Garbage pile overflowing behind the bus station. Smell is terrible.",
+      "category": "garbage",
+      "expectedCategory": "garbage",
+      "expectedUrgency": "medium",
+      "language": "en"
+    },
+    {
+      "id": 3,
+      "description": "Street light flickering on and off at the intersection. Dangerous at night.",
+      "category": "street_light",
+      "expectedCategory": "street_light",
+      "expectedUrgency": "low",
+      "language": "en"
+    },
+    {
+      "id": 4,
+      "description": "Water pipe burst, flooding the sidewalk near the hospital.",
+      "category": "water",
+      "expectedCategory": "water",
+      "expectedUrgency": "high",
+      "language": "en"
+    },
+    {
+      "id": 5,
+      "description": "Open manhole cover in the middle of the road. Someone could fall in.",
+      "category": "other",
+      "expectedCategory": "other",
+      "expectedUrgency": "high",
+      "language": "en"
+    },
+    {
+      "id": 6,
+      "description": "Small crack in the pavement, not dangerous but should be fixed.",
+      "category": "pothole",
+      "expectedCategory": "pothole",
+      "expectedUrgency": "low",
+      "language": "en"
+    },
+    {
+      "id": 7,
+      "description": "Trash bins not collected for a week. Piling up on the street corner.",
+      "category": "garbage",
+      "expectedCategory": "garbage",
+      "expectedUrgency": "low",
+      "language": "en"
+    },
+    {
+      "id": 8,
+      "description": "Street light completely out on the bridge. Very dark at night.",
+      "category": "street_light",
+      "expectedCategory": "street_light",
+      "expectedUrgency": "medium",
+      "language": "en"
+    },
+    {
+      "id": 9,
+      "description": "Leaking water from a hydrant. Water flowing into the street.",
+      "category": "water",
+      "expectedCategory": "water",
+      "expectedUrgency": "medium",
+      "language": "en"
+    },
+    {
+      "id": 10,
+      "description": "Fallen tree branch blocking the sidewalk.",
+      "category": "other",
+      "expectedCategory": "other",
+      "expectedUrgency": "medium",
+      "language": "en"
+    },
+    {
+      "id": 11,
+      "description": "Deep pothole causing traffic jam on the main road.",
+      "category": "pothole",
+      "expectedCategory": "pothole",
+      "expectedUrgency": "high",
+      "language": "en"
+    },
+    {
+      "id": 12,
+      "description": "Illegal dumping of construction waste near the park.",
+      "category": "garbage",
+      "expectedCategory": "garbage",
+      "expectedUrgency": "medium",
+      "language": "en"
+    },
+    {
+      "id": 13,
+      "description": "Multiple street lights not working along the entire avenue.",
+      "category": "street_light",
+      "expectedCategory": "street_light",
+      "expectedUrgency": "medium",
+      "language": "en"
+    },
+    {
+      "id": 14,
+      "description": "Sewage overflow in the residential area. Health hazard.",
+      "category": "water",
+      "expectedCategory": "water",
+      "expectedUrgency": "high",
+      "language": "en"
+    },
+    {
+      "id": 15,
+      "description": "Broken glass scattered on the pedestrian path.",
+      "category": "other",
+      "expectedCategory": "other",
+      "expectedUrgency": "medium",
+      "language": "en"
+    },
+    {
+      "id": 16,
+      "description": "በዋና ገበያ ላይ ትላልቅ ጉዟት ተፈጥሯል። መኪኖች ለመሸለው ይሸውዋል።",
+      "category": "pothole",
+      "expectedCategory": "pothole",
+      "expectedUrgency": "medium",
+      "language": "am"
+    },
+    {
+      "id": 17,
+      "description": "በአውቶቡስ ጣቢያ አጠገኘው ቆሻሻ በጣም አስተካከል ነው። ጥሩ ሽታ ይሰጣል።",
+      "category": "garbage",
+      "expectedCategory": "garbage",
+      "expectedUrgency": "medium",
+      "language": "am"
+    },
+    {
+      "id": 18,
+      "description": "በመንገድ ክስተኛው የብርሃን መብራት አይተነባልም። በሌሊት አደጋ ሊፈጥር ይችላል።",
+      "category": "street_light",
+      "expectedCategory": "street_light",
+      "expectedUrgency": "medium",
+      "language": "am"
+    },
+    {
+      "id": 19,
+      "description": "የውሃ ቱቦ ተበርቷ ውሃ በመንገድ ላይ ይፈሳል።",
+      "category": "water",
+      "expectedCategory": "water",
+      "expectedUrgency": "medium",
+      "language": "am"
+    },
+    {
+      "id": 20,
+      "description": "የሰው ልጅ በመንገድ ላይ ወድቆ ይወዛል። አደጋ ነው።",
+      "category": "other",
+      "expectedCategory": "other",
+      "expectedUrgency": "high",
+      "language": "am"
+    },
+    {
+      "id": 21,
+      "description": "በአጭር መንገድ ላይ ትንሽ ጉዟት አለ። አደጋ አይደለም።",
+      "category": "pothole",
+      "expectedCategory": "pothole",
+      "expectedUrgency": "low",
+      "language": "am"
+    },
+    {
+      "id": 22,
+      "description": "ቆሻሻ ቤቶች አልተሰበሱም። በጎን ላይ ይቆማሉ።",
+      "category": "garbage",
+      "expectedCategory": "garbage",
+      "expectedUrgency": "low",
+      "language": "am"
+    },
+    {
+      "id": 23,
+      "description": "የብርሃን መብራት በገበያ ላይ አይሰራም።",
+      "category": "street_light",
+      "expectedCategory": "street_light",
+      "expectedUrgency": "low",
+      "language": "am"
+    },
+    {
+      "id": 24,
+      "description": "የመጠጥቀሚያ ውሃ ትንሽ ይፈሳል። አደጋ አይደለም።",
+      "category": "water",
+      "expectedCategory": "water",
+      "expectedUrgency": "low",
+      "language": "am"
+    },
+    {
+      "id": 25,
+      "description": "የእንጨት ቅርጫፊ በመንገድ ላይ ተገኝቶ ነው።",
+      "category": "other",
+      "expectedCategory": "other",
+      "expectedUrgency": "low",
+      "language": "am"
+    },
+    {
+      "id": 26,
+      "description": "በዋና መንገድ ላይ ትላልቅ ጉዟት ተፈጥሯል። መኪኖች አይሸሉም።",
+      "category": "pothole",
+      "expectedCategory": "pothole",
+      "expectedUrgency": "high",
+      "language": "am"
+    },
+    {
+      "id": 27,
+      "description": "በፓርክ ዙሪያ ውስጥ ቆሻሻ ተሰብሶ ነው። ጤና አደጋ ነው።",
+      "category": "garbage",
+      "expectedCategory": "garbage",
+      "expectedUrgency": "high",
+      "language": "am"
+    },
+    {
+      "id": 28,
+      "description": "የኤሌክትሪክ ካብል ተቆርፏል። እሳት ወደ እሳት ተነሳ። አደጋ ነው።",
+      "category": "other",
+      "expectedCategory": "other",
+      "expectedUrgency": "high",
+      "language": "am"
+    },
+    {
+      "id": 29,
+      "description": "የውሃ ቱቦ በአካባቢው ተፈክሏል። ቤቶች ውሃ የለም።",
+      "category": "water",
+      "expectedCategory": "water",
+      "expectedUrgency": "high",
+      "language": "am"
+    },
+    {
+      "id": 30,
+      "description": "በመንገድ ላይ የሚካለው የእንጨት ቁልፍ ወድቆ ነው።",
+      "category": "other",
+      "expectedCategory": "other",
+      "expectedUrgency": "medium",
+      "language": "am"
+    },
+    {
+      "id": 31,
+      "description": "በዋና መንገድ ላይ ብዙ ጉዟቶች አሉ። መኪኖች ይሸሉም።",
+      "category": "pothole",
+      "expectedCategory": "pothole",
+      "expectedUrgency": "medium",
+      "language": "am"
+    },
+    {
+      "id": 32,
+      "description": "ቆሻሻ በአካባቢው ይቆማል። መጠጥቀሚያ ቤት አጠገኘው ነው።",
+      "category": "garbage",
+      "expectedCategory": "garbage",
+      "expectedUrgency": "medium",
+      "language": "am"
+    },
+    {
+      "id": 33,
+      "description": "የብርሃን መብራት በገበያ ላይ አይሰራም። ጨለማ ነው።",
+      "category": "street_light",
+      "expectedCategory": "street_light",
+      "expectedUrgency": "low",
+      "language": "am"
+    },
+    {
+      "id": 34,
+      "description": "የውሃ ቱቦ በቤት ውስጥ ይፈሳል። ወሰን አደጋ አይደለም።",
+      "category": "water",
+      "expectedCategory": "water",
+      "expectedUrgency": "low",
+      "language": "am"
+    },
+    {
+      "id": 35,
+      "description": "በመንገድ ላይ የሚካለው የብረት ቁልፍ አለ።",
+      "category": "other",
+      "expectedCategory": "other",
+      "expectedUrgency": "low",
+      "language": "am"
+    },
+    {
+      "id": 36,
+      "description": "Hawassa main road has big hole. Cars cannot pass.",
+      "category": "pothole",
+      "expectedCategory": "pothole",
+      "expectedUrgency": "high",
+      "language": "sid"
+    },
+    {
+      "id": 37,
+      "description": "Trash everywhere near Amora Gedel. Very bad smell.",
+      "category": "garbage",
+      "expectedCategory": "garbage",
+      "expectedUrgency": "medium",
+      "language": "sid"
+    },
+    {
+      "id": 38,
+      "description": "Street light broken at Tabor area. Dark at night.",
+      "category": "street_light",
+      "expectedCategory": "street_light",
+      "expectedUrgency": "medium",
+      "language": "sid"
+    },
+    {
+      "id": 39,
+      "description": "Water leaking from pipe near Lake Hawassa.",
+      "category": "water",
+      "expectedCategory": "water",
+      "expectedUrgency": "medium",
+      "language": "sid"
+    },
+    {
+      "id": 40,
+      "description": "Big stone blocking road. Cars cannot go.",
+      "category": "other",
+      "expectedCategory": "other",
+      "expectedUrgency": "high",
+      "language": "sid"
+    }
+  ]
+}<arg_value><arg_key>EmptyFile</arg_key><arg_value>false
