@@ -1,9 +1,68 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
-import { requireCallerWithEnforce } from '@/lib/auth/verify';
+import { requireCallerWithEnforce, getCaller } from '@/lib/auth/verify';
 
 // Generic data API endpoint for all Supabase queries
 // Usage: /api/data/table_name or /api/data/table_name/id
+
+// Role-based table permissions
+// Format: table -> { read: [roles], write: [roles] }
+const TABLE_PERMISSIONS: Record<string, { read: string[]; write: string[] }> = {
+  // Public read tables
+  vehicles: { read: ['*'], write: ['admin', 'taxi', 'government_fleet'] },
+  taxi_stations: { read: ['*'], write: ['admin', 'old_terminal', 'new_terminal'] },
+  bus_terminals: { read: ['*'], write: ['admin', 'old_terminal', 'new_terminal'] },
+  routes: { read: ['*'], write: ['admin', 'old_terminal', 'new_terminal'] },
+  hotels: { read: ['*'], write: ['admin', 'tourism', 'hotel'] },
+  hospitals: { read: ['*'], write: ['admin', 'health', 'hospital'] },
+  pharmacies: { read: ['*'], write: ['admin', 'health', 'pharmacy'] },
+  tourism_sites: { read: ['*'], write: ['admin', 'tourism'] },
+  tour_packages: { read: ['*'], write: ['admin', 'tourism'] },
+  emergency_centers: { read: ['*'], write: ['admin', 'emergency'] },
+  announcements: { read: ['*'], write: ['admin'] },
+  government_offices: { read: ['*'], write: ['admin', 'government_fleet'] },
+  churches: { read: ['*'], write: ['admin'] },
+  eco_shine_locations: { read: ['*'], write: ['admin'] },
+  marketplace_providers: { read: ['*'], write: ['admin'] },
+  guest_houses: { read: ['*'], write: ['admin', 'tourism'] },
+
+  // User-specific tables (read own only, write restricted)
+  users: { read: ['*'], write: ['admin'] }, // Never allow writes to users.role
+  trips: { read: ['*'], write: ['admin', 'taxi', 'government_fleet'] },
+  tickets: { read: ['*'], write: ['admin', 'old_terminal', 'new_terminal'] },
+  hotel_bookings: { read: ['*'], write: ['admin', 'tourism', 'hotel'] },
+  emergency_requests: { read: ['*'], write: ['admin', 'emergency'] },
+  notifications: { read: ['*'], write: ['admin'] },
+  payments: { read: ['*'], write: ['admin'] },
+  wallet_transactions: { read: ['*'], write: ['admin'] },
+
+  // System tables (admin only)
+  analytics: { read: ['admin'], write: ['admin'] },
+  audit_logs: { read: ['admin'], write: ['admin'] },
+};
+
+// Helper to check if role has permission
+function hasPermission(table: string, operation: 'read' | 'write', userRole: string | null): boolean {
+  const perms = TABLE_PERMISSIONS[table];
+  if (!perms) return false;
+
+  const allowedRoles = perms[operation];
+  if (allowedRoles.includes('*')) return true;
+  if (!userRole) return false;
+  return allowedRoles.includes(userRole);
+}
+
+// Helper to get user role from Supabase
+async function getUserRole(firebaseUid: string): Promise<string | null> {
+  if (!firebaseUid) return null;
+  const { data, error } = await supabase
+    .from('users')
+    .select('role')
+    .eq('firebase_uid', firebaseUid)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data.role;
+}
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ path: string[] }> }
@@ -33,16 +92,18 @@ export async function GET(
       );
     }
 
+    // Check table permissions
+    const caller = authResult.caller;
+    const userRole = caller ? await getUserRole(caller.uid) : null;
+    if (!hasPermission(table, 'read', userRole)) {
+      return NextResponse.json(
+        { error: 'Forbidden: Insufficient permissions for this table' },
+        { status: 403 }
+      );
+    }
+
     // Validate table name to prevent SQL injection
-    const validTables = [
-      'users', 'vehicles', 'taxi_stations', 'bus_terminals', 'routes',
-      'trips', 'tickets', 'hotels', 'hotel_bookings', 'hospitals',
-      'pharmacies', 'tourism_sites', 'tour_packages', 'emergency_requests',
-      'emergency_centers', 'announcements', 'notifications', 'payments',
-      'wallet_transactions', 'government_offices', 'churches',
-      'eco_shine_locations', 'marketplace_providers', 'guest_houses',
-      'analytics', 'audit_logs'
-    ];
+    const validTables = Object.keys(TABLE_PERMISSIONS);
 
     if (!validTables.includes(table)) {
       return NextResponse.json(
@@ -149,15 +210,17 @@ export async function POST(
       );
     }
 
-    const validTables = [
-      'users', 'vehicles', 'taxi_stations', 'bus_terminals', 'routes',
-      'trips', 'tickets', 'hotels', 'hotel_bookings', 'hospitals',
-      'pharmacies', 'tourism_sites', 'tour_packages', 'emergency_requests',
-      'emergency_centers', 'announcements', 'notifications', 'payments',
-      'wallet_transactions', 'government_offices', 'churches',
-      'eco_shine_locations', 'marketplace_providers', 'guest_houses',
-      'analytics', 'audit_logs'
-    ];
+    // Check table permissions
+    const caller = authResult.caller;
+    const userRole = caller ? await getUserRole(caller.uid) : null;
+    if (!hasPermission(table, 'write', userRole)) {
+      return NextResponse.json(
+        { error: 'Forbidden: Insufficient permissions for this table' },
+        { status: 403 }
+      );
+    }
+
+    const validTables = Object.keys(TABLE_PERMISSIONS);
 
     if (!validTables.includes(table)) {
       return NextResponse.json(
@@ -167,6 +230,14 @@ export async function POST(
     }
 
     const body = await request.json();
+
+    // Prevent writes to users.role
+    if (table === 'users' && body.role !== undefined) {
+      return NextResponse.json(
+        { error: 'Forbidden: Cannot write to users.role' },
+        { status: 403 }
+      );
+    }
 
     const { data, error } = await supabase
       .from(table)
@@ -221,15 +292,17 @@ export async function PATCH(
       );
     }
 
-    const validTables = [
-      'users', 'vehicles', 'taxi_stations', 'bus_terminals', 'routes',
-      'trips', 'tickets', 'hotels', 'hotel_bookings', 'hospitals',
-      'pharmacies', 'tourism_sites', 'tour_packages', 'emergency_requests',
-      'emergency_centers', 'announcements', 'notifications', 'payments',
-      'wallet_transactions', 'government_offices', 'churches',
-      'eco_shine_locations', 'marketplace_providers', 'guest_houses',
-      'analytics', 'audit_logs'
-    ];
+    // Check table permissions
+    const caller = authResult.caller;
+    const userRole = caller ? await getUserRole(caller.uid) : null;
+    if (!hasPermission(table, 'write', userRole)) {
+      return NextResponse.json(
+        { error: 'Forbidden: Insufficient permissions for this table' },
+        { status: 403 }
+      );
+    }
+
+    const validTables = Object.keys(TABLE_PERMISSIONS);
 
     if (!validTables.includes(table)) {
       return NextResponse.json(
@@ -239,6 +312,14 @@ export async function PATCH(
     }
 
     const body = await request.json();
+
+    // Prevent writes to users.role
+    if (table === 'users' && body.role !== undefined) {
+      return NextResponse.json(
+        { error: 'Forbidden: Cannot write to users.role' },
+        { status: 403 }
+      );
+    }
 
     const { data, error } = await supabase
       .from(table)
@@ -294,15 +375,17 @@ export async function DELETE(
       );
     }
 
-    const validTables = [
-      'users', 'vehicles', 'taxi_stations', 'bus_terminals', 'routes',
-      'trips', 'tickets', 'hotels', 'hotel_bookings', 'hospitals',
-      'pharmacies', 'tourism_sites', 'tour_packages', 'emergency_requests',
-      'emergency_centers', 'announcements', 'notifications', 'payments',
-      'wallet_transactions', 'government_offices', 'churches',
-      'eco_shine_locations', 'marketplace_providers', 'guest_houses',
-      'analytics', 'audit_logs'
-    ];
+    // Check table permissions
+    const caller = authResult.caller;
+    const userRole = caller ? await getUserRole(caller.uid) : null;
+    if (!hasPermission(table, 'write', userRole)) {
+      return NextResponse.json(
+        { error: 'Forbidden: Insufficient permissions for this table' },
+        { status: 403 }
+      );
+    }
+
+    const validTables = Object.keys(TABLE_PERMISSIONS);
 
     if (!validTables.includes(table)) {
       return NextResponse.json(
