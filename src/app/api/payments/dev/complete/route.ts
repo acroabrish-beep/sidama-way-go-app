@@ -13,7 +13,11 @@ import {
 } from '@/lib/station/server';
 
 export async function POST(request: Request) {
-  if (env.paymentProvider !== 'dev' || env.appEnv !== 'development') {
+  if (
+    env.paymentProvider !== 'dev' ||
+    env.appEnv !== 'development' ||
+    env.nodeEnv === 'production'
+  ) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 

@@ -25,6 +25,7 @@ export function getPaymentProvider(): PaymentProvider {
   return createPaymentProvider({
     provider: env.paymentProvider,
     appEnv: env.appEnv,
+    nodeEnv: env.nodeEnv,
     webhookSecret: env.paymentWebhookSecret,
   });
 }

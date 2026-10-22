@@ -16,6 +16,7 @@ function devProvider() {
   return createPaymentProvider({
     provider: 'dev',
     appEnv: 'development',
+    nodeEnv: 'test',
     webhookSecret: 'test-secret',
   });
 }

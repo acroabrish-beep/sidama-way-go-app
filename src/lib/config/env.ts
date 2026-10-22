@@ -27,7 +27,7 @@ export const env = {
   qrSigningPreviousKeys: process.env.QR_SIGNING_PREVIOUS_KEYS || '',
   paymentProvider: process.env.PAYMENT_PROVIDER || 'disabled',
   paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || '',
-  appEnv: process.env.APP_ENV || 'unset',
+  appEnv: process.env.APP_ENV || 'production',
 
   // Environment
   nodeEnv: process.env.NODE_ENV || 'development',

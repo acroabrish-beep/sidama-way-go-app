@@ -110,11 +110,15 @@ class DevelopmentPaymentProvider implements PaymentProvider {
 export function createPaymentProvider(config: {
   provider: string;
   appEnv: string;
+  nodeEnv: string;
   webhookSecret: string;
 }): PaymentProvider {
   if (config.provider === 'disabled') return new DisabledPaymentProvider();
-  if (config.provider === 'dev' && config.appEnv === 'development') {
-    return new DevelopmentPaymentProvider(config.webhookSecret);
+  if (config.provider === 'dev') {
+    if (config.appEnv === 'development' && config.nodeEnv !== 'production') {
+      return new DevelopmentPaymentProvider(config.webhookSecret);
+    }
+    throw new PaymentsNotConfiguredError();
   }
   throw new PaymentsNotConfiguredError();
 }
