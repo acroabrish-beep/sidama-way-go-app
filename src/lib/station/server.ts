@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { getCaller, type Caller } from '@/lib/auth/verify';
+import { apiError } from '@/lib/api/errors';
 import { env } from '@/lib/config/env';
 import { isOfficialTariff, tariffLabel } from '@/lib/station/domain';
 
@@ -30,7 +31,7 @@ export async function requireStationUser(
   if (!caller) {
     return {
       ok: false,
-      response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }),
+      response: NextResponse.json(apiError('unauthorized', 'Unauthorized'), { status: 401 }),
     };
   }
 
@@ -39,7 +40,7 @@ export async function requireStationUser(
     return {
       ok: false,
       response: NextResponse.json(
-        { error: 'Station service is not configured' },
+        apiError('storage_error', 'Station service is not configured'),
         { status: 503 },
       ),
     };
@@ -55,7 +56,7 @@ export async function requireStationUser(
     return {
       ok: false,
       response: NextResponse.json(
-        { error: 'Unable to verify the account role' },
+        apiError('storage_error', 'Unable to verify the account role'),
         { status: 503 },
       ),
     };
@@ -64,14 +65,14 @@ export async function requireStationUser(
   if (!user?.role) {
     return {
       ok: false,
-      response: NextResponse.json({ error: 'Account role not found' }, { status: 403 }),
+      response: NextResponse.json(apiError('forbidden', 'Account role not found'), { status: 403 }),
     };
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     return {
       ok: false,
-      response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      response: NextResponse.json(apiError('forbidden', 'Forbidden'), { status: 403 }),
     };
   }
 

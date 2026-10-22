@@ -17,6 +17,7 @@ export interface TicketVerificationRow {
   vehicle_type: string;
   fare_etb: number | string;
   status: string;
+  issued_at: string;
   used_at: string | null;
   expires_at: string;
 }
@@ -30,7 +31,7 @@ export type VerifyOutcome =
   | { ok: false; status: number; error: string };
 
 const TICKET_COLUMNS =
-  'id, code, route_id, vehicle_type, fare_etb, status, used_at, expires_at';
+  'id, code, route_id, vehicle_type, fare_etb, status, issued_at, used_at, expires_at';
 
 async function verifyTicketId(
   db: SupabaseClient,

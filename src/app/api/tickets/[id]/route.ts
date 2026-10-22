@@ -69,7 +69,7 @@ export async function GET(request: Request, context: RouteContext) {
     loadRouteDetails(authorization.db, row.route_id),
     authorization.db
       .from('st_tariffs')
-      .select('id, fare_etb, effective_from, effective_to, source_reference, approved_by')
+      .select('id, route_id, vehicle_type, fare_etb, effective_from, effective_to, source_reference, approved_by, created_by')
       .eq('id', row.tariff_id)
       .maybeSingle(),
   ]);
