@@ -1,13 +1,13 @@
 // src/app/api/citizen-reporting/route.ts
 //
-// API endpoint for citizen reporting feature
-// - POST: Create a new citizen report
-// - GET: List reports (user's own or admin view)
-// - PATCH: Update report status
-// - GET /metrics: AI triage metrics (admin only)
+// API endpoint for citizen reporting:
+// - POST: create a report, then triage it with Gemini (failure never fails the request)
+// - GET: list reports for one citizen, or all reports for an admin
+// - PATCH: admin status update and category/urgency override
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { apiError } from "@/lib/api/errors";
 import { triageReport } from "@/lib/ai/triage";
 import { requireCallerWithEnforce } from "@/lib/auth/verify";
 
@@ -26,117 +26,87 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
   auth: { persistSession: false },
 });
 
+const VALID_CATEGORIES = ['pothole', 'garbage', 'street_light', 'water', 'other'] as const;
+const VALID_STATUSES = ['pending', 'in_progress', 'resolved'] as const;
+const VALID_URGENCY = ['low', 'medium', 'high'] as const;
+const LIST_LIMIT = 200;
+
 type CreateReportPayload = {
   firebaseUid: string;
-  category: 'pothole' | 'garbage' | 'street_light' | 'water' | 'other';
+  category: typeof VALID_CATEGORIES[number];
   description?: string;
   photoUrl?: string;
   latitude: number;
   longitude: number;
 };
 
-type UpdateStatusPayload = {
+type UpdateReportPayload = {
   reportId: string;
-  status: 'pending' | 'in_progress' | 'resolved';
-  finalCategory?: 'pothole' | 'garbage' | 'street_light' | 'water' | 'other';
-  finalUrgency?: 'low' | 'medium' | 'high';
+  status?: typeof VALID_STATUSES[number];
+  finalCategory?: typeof VALID_CATEGORIES[number];
+  finalUrgency?: typeof VALID_URGENCY[number];
 };
 
-const VALID_CATEGORIES = ['pothole', 'garbage', 'street_light', 'water', 'other'] as const;
-const VALID_STATUSES = ['pending', 'in_progress', 'resolved'] as const;
+function isOneOf<T extends string>(value: unknown, allowed: readonly T[]): value is T {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value);
+}
 
 export async function POST(req: NextRequest) {
-  console.log("[citizen-reporting][POST] Creating new citizen report");
-
   let payload: CreateReportPayload;
   try {
     payload = await req.json();
   } catch {
-    console.error("[citizen-reporting][POST] Invalid JSON body");
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    return NextResponse.json(apiError('invalid_json', 'Invalid JSON body'), { status: 400 });
   }
 
-  // Validate required fields
   if (!payload.firebaseUid) {
-    console.error("[citizen-reporting][POST] Missing firebaseUid");
     return NextResponse.json(
-      { error: "firebaseUid is required" },
-      { status: 400 }
+      apiError('validation_failed', 'firebaseUid is required'),
+      { status: 400 },
     );
   }
 
-  // Auth check: caller.uid must equal firebaseUid
   const authResult = await requireCallerWithEnforce(req, {
     uid: payload.firebaseUid,
     route: '/api/citizen-reporting',
     method: 'POST',
   });
-
   if (!authResult.ok) {
     return NextResponse.json(
-      { error: authResult.error },
-      { status: authResult.status }
+      apiError(authResult.status === 403 ? 'forbidden' : 'unauthorized', authResult.error ?? 'Unauthorized'),
+      { status: authResult.status },
     );
   }
 
-  if (!payload.category) {
-    console.error("[citizen-reporting][POST] Missing category");
+  if (!isOneOf(payload.category, VALID_CATEGORIES)) {
     return NextResponse.json(
-      { error: "category is required" },
-      { status: 400 }
+      apiError('validation_failed', `category must be one of: ${VALID_CATEGORIES.join(', ')}`),
+      { status: 400 },
     );
   }
 
-  if (!VALID_CATEGORIES.includes(payload.category)) {
-    console.error("[citizen-reporting][POST] Invalid category:", payload.category);
+  if (
+    typeof payload.latitude !== 'number' ||
+    typeof payload.longitude !== 'number' ||
+    !Number.isFinite(payload.latitude) ||
+    !Number.isFinite(payload.longitude) ||
+    payload.latitude < -90 ||
+    payload.latitude > 90 ||
+    payload.longitude < -180 ||
+    payload.longitude > 180
+  ) {
     return NextResponse.json(
-      { error: `category must be one of: ${VALID_CATEGORIES.join(', ')}` },
-      { status: 400 }
+      apiError('validation_failed', 'latitude/longitude must be valid coordinates'),
+      { status: 400 },
     );
   }
 
-  if (payload.latitude === undefined || payload.latitude === null) {
-    console.error("[citizen-reporting][POST] Missing latitude");
-    return NextResponse.json(
-      { error: "latitude is required" },
-      { status: 400 }
-    );
-  }
-
-  if (payload.longitude === undefined || payload.longitude === null) {
-    console.error("[citizen-reporting][POST] Missing longitude");
-    return NextResponse.json(
-      { error: "longitude is required" },
-      { status: 400 }
-    );
-  }
-
-  // Validate latitude/longitude ranges
-  if (payload.latitude < -90 || payload.latitude > 90) {
-    console.error("[citizen-reporting][POST] Invalid latitude:", payload.latitude);
-    return NextResponse.json(
-      { error: "latitude must be between -90 and 90" },
-      { status: 400 }
-    );
-  }
-
-  if (payload.longitude < -180 || payload.longitude > 180) {
-    console.error("[citizen-reporting][POST] Invalid longitude:", payload.longitude);
-    return NextResponse.json(
-      { error: "longitude must be between -180 and 180" },
-      { status: 400 }
-    );
-  }
-
-  console.log("[citizen-reporting][POST] Inserting report for firebaseUid:", payload.firebaseUid);
-
-  // Insert the report
   const { data, error } = await supabase
     .from("citizen_reports")
     .insert({
       reporter_firebase_uid: payload.firebaseUid,
       category: payload.category,
-      description: payload.description || null,
+      description: payload.description?.trim() || null,
       photo_url: payload.photoUrl || null,
       latitude: payload.latitude,
       longitude: payload.longitude,
@@ -146,13 +116,13 @@ export async function POST(req: NextRequest) {
     .single();
 
   if (error) {
-    console.error("[citizen-reporting][POST] Insert error:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[citizen-reporting][POST] Insert failed:", error.message);
+    return NextResponse.json(
+      apiError('storage_error', 'Unable to save the report'),
+      { status: 503 },
+    );
   }
 
-  console.log("[citizen-reporting][POST] Report created successfully, ID:", data.id);
-
-  // Attempt AI triage (non-blocking)
   try {
     const triageResult = await triageReport({
       description: payload.description || '',
@@ -160,7 +130,6 @@ export async function POST(req: NextRequest) {
     });
 
     if (triageResult) {
-      // AI triage succeeded - update the report with AI suggestions
       const { error: updateError } = await supabase
         .from("citizen_reports")
         .update({
@@ -172,260 +141,216 @@ export async function POST(req: NextRequest) {
           ai_confidence: triageResult.confidence,
           ai_model: 'gemini-1.5-flash',
           triaged_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         })
         .eq("id", data.id);
 
       if (updateError) {
-        console.error("[citizen-reporting][POST] Failed to update AI triage results:", updateError.message);
-      } else {
-        console.log("[citizen-reporting][POST] AI triage completed for report:", data.id);
+        console.error("[citizen-reporting][POST] Failed to store triage:", updateError.message);
       }
     } else {
-      // AI triage failed or was skipped - mark as failed/skipped
-      const hasApiKey = !!process.env.GEMINI_API_KEY;
-      const aiStatus = hasApiKey ? 'failed' : 'skipped';
-      
+      const aiStatus = process.env.GEMINI_API_KEY ? 'failed' : 'skipped';
       const { error: updateError } = await supabase
         .from("citizen_reports")
-        .update({ ai_status: aiStatus })
+        .update({ ai_status: aiStatus, updated_at: new Date().toISOString() })
         .eq("id", data.id);
 
       if (updateError) {
-        console.error("[citizen-reporting][POST] Failed to update AI status:", updateError.message);
-      } else {
-        console.log("[citizen-reporting][POST] AI triage marked as", aiStatus, "for report:", data.id);
+        console.error("[citizen-reporting][POST] Failed to store AI status:", updateError.message);
       }
     }
   } catch (triageError) {
-    // AI triage error should not fail the entire request
-    console.error("[citizen-reporting][POST] AI triage error (non-blocking):", triageError);
-    
-    // Mark as failed
+    console.error("[citizen-reporting][POST] Triage error (non-fatal):", triageError);
     await supabase
       .from("citizen_reports")
-      .update({ ai_status: 'failed' })
+      .update({ ai_status: 'failed', updated_at: new Date().toISOString() })
       .eq("id", data.id);
   }
 
-  // Return the created report (AI fields may not be updated yet due to async nature)
-  return NextResponse.json({ report: data }, { status: 201 });
+  // Return the stored row so the client sees the AI fields immediately.
+  const { data: stored, error: reloadError } = await supabase
+    .from("citizen_reports")
+    .select("*")
+    .eq("id", data.id)
+    .maybeSingle();
+  if (reloadError) {
+    console.error("[citizen-reporting][POST] Reload failed:", reloadError.message);
+  }
+
+  return NextResponse.json({ report: stored ?? data }, { status: 201 });
 }
 
 export async function GET(req: NextRequest) {
-  console.log("[citizen-reporting][GET] Fetching citizen reports");
-
   const firebaseUid = req.nextUrl.searchParams.get("firebaseUid");
   const admin = req.nextUrl.searchParams.get("admin");
   const adminFirebaseUid = req.nextUrl.searchParams.get("adminFirebaseUid");
   const status = req.nextUrl.searchParams.get("status");
+  const updatedSinceRaw = req.nextUrl.searchParams.get("updatedSince");
 
-  // Require either firebaseUid or admin=true (with adminFirebaseUid)
   if (!firebaseUid && admin !== "true") {
-    console.error("[citizen-reporting][GET] Missing required query parameter (firebaseUid or admin=true with adminFirebaseUid)");
     return NextResponse.json(
-      { error: "Either firebaseUid query parameter or admin=true (with adminFirebaseUid) is required" },
-      { status: 400 }
+      apiError('validation_failed', 'firebaseUid or admin=true is required'),
+      { status: 400 },
     );
   }
 
-  // Auth check
+  let updatedSince: string | null = null;
+  if (updatedSinceRaw) {
+    const parsed = new Date(updatedSinceRaw);
+    if (Number.isNaN(parsed.getTime())) {
+      return NextResponse.json(
+        apiError('validation_failed', 'updatedSince must be an ISO timestamp'),
+        { status: 400 },
+      );
+    }
+    updatedSince = parsed.toISOString();
+  }
+
+  if (status && !isOneOf(status, VALID_STATUSES)) {
+    return NextResponse.json(
+      apiError('validation_failed', `status must be one of: ${VALID_STATUSES.join(', ')}`),
+      { status: 400 },
+    );
+  }
+
   if (firebaseUid) {
-    // User mode: caller.uid must equal firebaseUid
     const authResult = await requireCallerWithEnforce(req, {
       uid: firebaseUid,
       route: '/api/citizen-reporting',
       method: 'GET',
     });
-
     if (!authResult.ok) {
       return NextResponse.json(
-        { error: authResult.error },
-        { status: authResult.status }
+        apiError(authResult.status === 403 ? 'forbidden' : 'unauthorized', authResult.error ?? 'Unauthorized'),
+        { status: authResult.status },
       );
     }
-  } else if (admin === "true" && adminFirebaseUid) {
-    // Admin mode: caller must be admin and caller.uid must equal adminFirebaseUid
+  } else {
     const authResult = await requireCallerWithEnforce(req, {
-      uid: adminFirebaseUid,
       adminOnly: true,
       route: '/api/citizen-reporting',
       method: 'GET',
     });
-
     if (!authResult.ok) {
       return NextResponse.json(
-        { error: authResult.error },
-        { status: authResult.status }
+        apiError(authResult.status === 403 ? 'forbidden' : 'unauthorized', authResult.error ?? 'Unauthorized'),
+        { status: authResult.status },
+      );
+    }
+    if (
+      adminFirebaseUid &&
+      authResult.caller &&
+      adminFirebaseUid !== authResult.caller.uid
+    ) {
+      return NextResponse.json(
+        apiError('forbidden', 'Forbidden: UID mismatch'),
+        { status: 403 },
       );
     }
   }
+
+  // Capture the watermark before querying so a row changed during the query
+  // is not skipped by the next incremental poll.
+  const serverTime = new Date().toISOString();
 
   let query = supabase
     .from("citizen_reports")
     .select("*")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .limit(LIST_LIMIT);
 
-  // User mode: get only their own reports
   if (firebaseUid) {
-    console.log("[citizen-reporting][GET] Fetching reports for firebaseUid:", firebaseUid);
     query = query.eq("reporter_firebase_uid", firebaseUid);
   }
-
-  // Admin mode: get all reports, optionally filtered by status
-  if (admin === "true") {
-    if (!adminFirebaseUid) {
-      console.error("[citizen-reporting][GET] admin=true requires adminFirebaseUid");
-      return NextResponse.json(
-        { error: "adminFirebaseUid is required when admin=true" },
-        { status: 400 }
-      );
-    }
-
-    const { data: adminUser, error: adminLookupError } = await supabase
-      .from("users")
-      .select("role")
-      .eq("firebase_uid", adminFirebaseUid)
-      .maybeSingle();
-
-    if (adminLookupError || !adminUser) {
-      console.error("[citizen-reporting][GET] Admin lookup failed:", adminLookupError?.message);
-      return NextResponse.json({ error: "Unable to verify admin access" }, { status: 403 });
-    }
-
-    // Admin roles from the Flutter UserModel enum (canonical role strings)
-    const ADMIN_ROLES = [
-      'admin',           // superAdmin
-      'old_terminal',    // oldTerminalAdmin
-      'new_terminal',    // newTerminalAdmin
-      'taxi',            // taxiAdmin
-      'tourism',         // tourismAdmin
-      'hotel',           // hotelAdmin
-      'health',          // healthAdmin
-      'pharmacy',        // pharmacyAdmin
-      'emergency',       // emergencyAdmin
-      'church',          // churchAdmin
-      'government_fleet' // governmentFleetAdmin
-    ];
-
-    if (!ADMIN_ROLES.includes(adminUser.role)) {
-      console.error("[citizen-reporting][GET] User lacks admin role:", adminFirebaseUid, adminUser.role);
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
-    }
-
-    console.log("[citizen-reporting][GET] Admin access verified for:", adminFirebaseUid, "role:", adminUser.role);
-
-    if (status) {
-      if (!VALID_STATUSES.includes(status as any)) {
-        console.error("[citizen-reporting][GET] Invalid status:", status);
-        return NextResponse.json(
-          { error: `status must be one of: ${VALID_STATUSES.join(', ')}` },
-          { status: 400 }
-        );
-      }
-      console.log("[citizen-reporting][GET] Filtering by status:", status);
-      query = query.eq("status", status);
-    }
+  if (admin === "true" && status) {
+    query = query.eq("status", status);
+  }
+  if (updatedSince) {
+    query = query.gt("updated_at", updatedSince);
   }
 
   const { data, error } = await query;
-
   if (error) {
-    console.error("[citizen-reporting][GET] Query error:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[citizen-reporting][GET] Query failed:", error.message);
+    return NextResponse.json(
+      apiError('storage_error', 'Unable to load reports'),
+      { status: 503 },
+    );
   }
 
-  console.log("[citizen-reporting][GET] Retrieved", data.length, "reports");
-  return NextResponse.json({ reports: data }, { status: 200 });
+  return NextResponse.json(
+    { reports: data ?? [], serverTime },
+    { status: 200 },
+  );
 }
 
 export async function PATCH(req: NextRequest) {
-  console.log("[citizen-reporting][PATCH] Updating report status");
-
-  // Auth check: admin only
   const authResult = await requireCallerWithEnforce(req, {
     adminOnly: true,
     route: '/api/citizen-reporting',
     method: 'PATCH',
   });
-
   if (!authResult.ok) {
     return NextResponse.json(
-      { error: authResult.error },
-      { status: authResult.status }
+      apiError(authResult.status === 403 ? 'forbidden' : 'unauthorized', authResult.error ?? 'Unauthorized'),
+      { status: authResult.status },
     );
   }
 
-  let payload: UpdateStatusPayload;
+  let payload: UpdateReportPayload;
   try {
     payload = await req.json();
   } catch {
-    console.error("[citizen-reporting][PATCH] Invalid JSON body");
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    return NextResponse.json(apiError('invalid_json', 'Invalid JSON body'), { status: 400 });
   }
 
-  // Validate required fields
   if (!payload.reportId) {
-    console.error("[citizen-reporting][PATCH] Missing reportId");
     return NextResponse.json(
-      { error: "reportId is required" },
-      { status: 400 }
+      apiError('validation_failed', 'reportId is required'),
+      { status: 400 },
     );
   }
 
-  if (!payload.status) {
-    console.error("[citizen-reporting][PATCH] Missing status");
+  if (!payload.status && !payload.finalCategory && !payload.finalUrgency) {
     return NextResponse.json(
-      { error: "status is required" },
-      { status: 400 }
+      apiError('validation_failed', 'status, finalCategory or finalUrgency is required'),
+      { status: 400 },
     );
   }
 
-  if (!VALID_STATUSES.includes(payload.status)) {
-    console.error("[citizen-reporting][PATCH] Invalid status:", payload.status);
+  if (payload.status !== undefined && !isOneOf(payload.status, VALID_STATUSES)) {
     return NextResponse.json(
-      { error: `status must be one of: ${VALID_STATUSES.join(', ')}` },
-      { status: 400 }
+      apiError('validation_failed', `status must be one of: ${VALID_STATUSES.join(', ')}`),
+      { status: 400 },
     );
   }
 
-  // Validate optional finalCategory
-  if (payload.finalCategory && !VALID_CATEGORIES.includes(payload.finalCategory)) {
-    console.error("[citizen-reporting][PATCH] Invalid finalCategory:", payload.finalCategory);
+  if (payload.finalCategory !== undefined && !isOneOf(payload.finalCategory, VALID_CATEGORIES)) {
     return NextResponse.json(
-      { error: `finalCategory must be one of: ${VALID_CATEGORIES.join(', ')}` },
-      { status: 400 }
+      apiError('validation_failed', `finalCategory must be one of: ${VALID_CATEGORIES.join(', ')}`),
+      { status: 400 },
     );
   }
 
-  // Validate optional finalUrgency
-  const VALID_URGENCY = ['low', 'medium', 'high'] as const;
-  if (payload.finalUrgency && !VALID_URGENCY.includes(payload.finalUrgency)) {
-    console.error("[citizen-reporting][PATCH] Invalid finalUrgency:", payload.finalUrgency);
+  if (payload.finalUrgency !== undefined && !isOneOf(payload.finalUrgency, VALID_URGENCY)) {
     return NextResponse.json(
-      { error: `finalUrgency must be one of: ${VALID_URGENCY.join(', ')}` },
-      { status: 400 }
+      apiError('validation_failed', `finalUrgency must be one of: ${VALID_URGENCY.join(', ')}`),
+      { status: 400 },
     );
   }
 
-  console.log("[citizen-reporting][PATCH] Updating report", payload.reportId, "to status:", payload.status);
+  const now = new Date().toISOString();
+  const updateData: Record<string, string> = { updated_at: now };
 
-  // Build update object
-  const updateData: any = {
-    status: payload.status,
-    updated_at: new Date().toISOString(),
-  };
-
-  // Set assigned_at when status becomes 'in_progress' (if not already set)
-  if (payload.status === 'in_progress') {
-    updateData.assigned_at = new Date().toISOString();
+  if (payload.status) {
+    updateData.status = payload.status;
+    if (payload.status === 'in_progress') {
+      updateData.assigned_at = now;
+    }
+    if (payload.status === 'resolved') {
+      updateData.resolved_at = now;
+    }
   }
-
-  // Set resolved_at when status becomes 'resolved'
-  if (payload.status === 'resolved') {
-    updateData.resolved_at = new Date().toISOString();
-  }
-
-  // Set final category and urgency if provided (admin override)
   if (payload.finalCategory) {
     updateData.final_category = payload.finalCategory;
   }
@@ -433,24 +358,27 @@ export async function PATCH(req: NextRequest) {
     updateData.final_urgency = payload.finalUrgency;
   }
 
-  // Update the report
   const { data, error } = await supabase
     .from("citizen_reports")
     .update(updateData)
     .eq("id", payload.reportId)
     .select("*")
-    .single();
+    .maybeSingle();
 
   if (error) {
-    console.error("[citizen-reporting][PATCH] Update error:", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("[citizen-reporting][PATCH] Update failed:", error.message);
+    return NextResponse.json(
+      apiError('storage_error', 'Unable to update the report'),
+      { status: 503 },
+    );
   }
 
   if (!data) {
-    console.error("[citizen-reporting][PATCH] Report not found:", payload.reportId);
-    return NextResponse.json({ error: "Report not found" }, { status: 404 });
+    return NextResponse.json(
+      apiError('not_found', 'Report not found'),
+      { status: 404 },
+    );
   }
 
-  console.log("[citizen-reporting][PATCH] Report updated successfully");
   return NextResponse.json({ report: data }, { status: 200 });
 }
