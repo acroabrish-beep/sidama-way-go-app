@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { getQrSigningKeys } from '@/lib/station/config';
+import { tariffLabel } from '@/lib/station/domain';
 import { signTicketQr } from '@/lib/station/qr';
 import { loadRouteDetails } from '@/lib/station/route-details';
 import {
@@ -15,6 +16,7 @@ interface TicketRow {
   code: string;
   passenger_firebase_uid: string;
   route_id: string;
+  tariff_id: string;
   vehicle_type: 'taxi' | 'bajaj' | 'minibus';
   fare_etb: number | string;
   status: string;
@@ -43,7 +45,7 @@ export async function GET(request: Request, context: RouteContext) {
   const { data: ticket, error } = await authorization.db
     .from('st_tickets')
     .select(
-      'id, code, passenger_firebase_uid, route_id, vehicle_type, fare_etb, status, issued_at, expires_at, used_at, used_by_uid, verified_vehicle_id',
+      'id, code, passenger_firebase_uid, route_id, tariff_id, vehicle_type, fare_etb, status, issued_at, expires_at, used_at, used_by_uid, verified_vehicle_id',
     )
     .eq('id', id)
     .maybeSingle();
@@ -63,12 +65,25 @@ export async function GET(request: Request, context: RouteContext) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
-  let route;
-  try {
-    route = await loadRouteDetails(authorization.db, row.route_id);
-  } catch {
+  const [routeResult, tariffResult] = await Promise.allSettled([
+    loadRouteDetails(authorization.db, row.route_id),
+    authorization.db
+      .from('st_tariffs')
+      .select('id, fare_etb, effective_from, effective_to, source_reference, approved_by')
+      .eq('id', row.tariff_id)
+      .maybeSingle(),
+  ]);
+  if (routeResult.status === 'rejected') {
     return NextResponse.json({ error: 'Unable to load the ticket route' }, { status: 503 });
   }
+  const route = routeResult.value;
+  if (tariffResult.status === 'rejected' || tariffResult.value.error) {
+    return NextResponse.json({ error: 'Unable to load the ticket tariff' }, { status: 503 });
+  }
+  const tariffRow = tariffResult.value.data;
+  const tariff = tariffRow
+    ? { ...tariffRow, label: tariffLabel(tariffRow) }
+    : null;
 
   const { data: payment, error: paymentError } = await authorization.db
     .from('st_payments')
@@ -120,6 +135,7 @@ export async function GET(request: Request, context: RouteContext) {
       verified_vehicle_id: row.verified_vehicle_id,
     },
     route,
+    tariff,
     payment: payment ?? null,
     qrToken,
     qrError,
