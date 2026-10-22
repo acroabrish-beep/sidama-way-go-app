@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS st_stations (
   name_am text,
   lat double precision,
   lng double precision,
-  active boolean NOT NULL DEFAULT true
+  active boolean NOT NULL DEFAULT true,
+  CONSTRAINT st_stations_name_unique UNIQUE (name)
 );
 
 CREATE TABLE IF NOT EXISTS st_routes (

@@ -7,12 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "node --test tests/station/domain.test.mjs tests/station/qr.test.mjs tests/station/payment-provider.test.mjs tests/station/ticket-code.test.mjs tests/station/webhook.test.mjs tests/station/sql-contract.test.mjs tests/station/route-guards.test.mjs",
     "eval:triage": "tsx scripts/eval-triage.ts"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "@supabase/supabase-js": "^2.110.8",
     "cors": "^2.8.6",
+    "csv-parse": "^7.0.3",
     "firebase-admin": "^14.5.0",
     "next": "16.2.11",
     "react": "19.2.4",
