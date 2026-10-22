@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { requireCallerWithEnforce } from "@/lib/auth/verify";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -40,6 +41,22 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Auth check: a valid Firebase token whose UID matches adminFirebaseUid and
+  // whose trusted Supabase role is an admin role.
+  const authResult = await requireCallerWithEnforce(req, {
+    uid: adminFirebaseUid,
+    adminOnly: true,
+    route: '/api/citizen-reporting/metrics',
+    method: 'GET',
+  });
+
+  if (!authResult.ok) {
+    return NextResponse.json(
+      { error: authResult.error },
+      { status: authResult.status }
+    );
+  }
+
   // Verify admin role (same pattern as GET)
   const { data: adminUser, error: adminLookupError } = await supabase
     .from("users")
@@ -53,11 +70,11 @@ export async function GET(req: NextRequest) {
   }
 
   if (!ADMIN_ROLES.includes(adminUser.role)) {
-    console.error("[citizen-reporting][METRICS] User lacks admin role:", adminFirebaseUid, adminUser.role);
+    console.error("[citizen-reporting][METRICS] User lacks admin role");
     return NextResponse.json({ error: "Admin access required" }, { status: 403 });
   }
 
-  console.log("[citizen-reporting][METRICS] Admin access verified for:", adminFirebaseUid);
+  console.log("[citizen-reporting][METRICS] Admin access verified");
 
   try {
     // Get all reports with relevant fields

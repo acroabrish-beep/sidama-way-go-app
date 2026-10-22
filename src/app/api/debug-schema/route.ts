@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase/client';
+import { requireCaller } from '@/lib/auth/verify';
 
 export async function GET(request: NextRequest) {
+  // Debug schema introspection reads the users table: always require an admin
+  // token, regardless of the AUTH_ENFORCE rollout flag.
+  const authResult = await requireCaller(request, { adminOnly: true });
+  if (!authResult.ok) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+  }
+
   try {
     // Try to select the most critical columns required by the sync logic
     const { error } = await supabase.from('users').select(`

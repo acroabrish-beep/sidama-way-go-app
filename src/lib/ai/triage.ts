@@ -1,8 +1,16 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { env } from '@/lib/config/env';
 
-// Initialize Gemini AI (same pattern as /api/gemini)
-const genAI = new GoogleGenerativeAI(env.geminiApiKey);
+// Initialize Gemini AI lazily so a missing key does not crash the module.
+let genAI: GoogleGenerativeAI | null = null;
+
+function getGenAI(): GoogleGenerativeAI | null {
+  if (!env.geminiApiKey) return null;
+  if (!genAI) {
+    genAI = new GoogleGenerativeAI(env.geminiApiKey);
+  }
+  return genAI;
+}
 
 const MODEL_NAME = 'gemini-1.5-flash';
 const TIMEOUT_MS = 10000; // 10 seconds
@@ -86,7 +94,8 @@ function validateTriageResponse(data: any): TriageResult | null {
  */
 export async function triageReport(input: TriageInput): Promise<TriageResult | null> {
   // Check if API key is configured
-  if (!env.geminiApiKey) {
+  const client = getGenAI();
+  if (!client) {
     console.log('[triage] GEMINI_API_KEY not configured, skipping AI triage');
     return null;
   }
@@ -127,7 +136,7 @@ Language codes: am (Amharic), en (English), sid (Sidaamu Afoo), other`;
     const userPrompt = `Category: ${redactedCategory}\nDescription: ${redactedDescription}\n\nProvide JSON triage result.`;
 
     // Initialize model with system instruction
-    const model = genAI.getGenerativeModel({
+    const model = client.getGenerativeModel({
       model: MODEL_NAME,
       systemInstruction: systemPrompt,
     });

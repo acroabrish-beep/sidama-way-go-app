@@ -9,6 +9,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 import { requireCallerWithEnforce } from "@/lib/auth/verify";
+import {
+  normalizeRole,
+  resolveSelfServiceRole,
+  SELF_SERVICE_ROLES,
+} from "@/lib/auth/role-policy";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -37,30 +42,6 @@ type SyncPayload = {
   city?: string;
   language?: string;
 };
-
-/**
- * Normalizes role strings to canonical versions for the 'role' column.
- */
-function normalizeRole(role?: string): string {
-  if (!role) return "citizen";
-  const r = role.toLowerCase().trim();
-
-  if (r.includes("admin") && r.includes("super")) return "admin";
-  if (r === "admin") return "admin";
-  if (r.includes("taxi")) return "taxi";
-  if (r.includes("new") && r.includes("terminal")) return "new_terminal";
-  if (r.includes("old") && r.includes("terminal")) return "old_terminal";
-  if (r.includes("tourism")) return "tourism";
-  if (r.includes("hotel")) return "hotel";
-  if (r.includes("health") || r.includes("hospital")) return "health";
-  if (r.includes("pharmacy")) return "pharmacy";
-  if (r.includes("emergency")) return "emergency";
-  if (r.includes("government")) return "government_fleet";
-  if (r.includes("church")) return "church";
-  if (r.includes("driver")) return "taxi_driver";
-
-  return "citizen";
-}
 
 /**
  * Maps a canonical role to a safe value for the 'user_type' column
@@ -177,6 +158,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // When authenticated, the payload email must match the verified token email.
+  // This prevents creating or linking an account with someone else's email.
+  if (
+    authResult.caller?.email &&
+    payload.email &&
+    authResult.caller.email.toLowerCase() !== payload.email.toLowerCase()
+  ) {
+    return NextResponse.json(
+      { error: "Forbidden: email does not match the authenticated user" },
+      { status: 403 }
+    );
+  }
+
   const { data: existing, error: lookupError } = await supabase
     .from("users")
     .select("*")
@@ -190,11 +184,11 @@ export async function POST(req: NextRequest) {
   if (existing) {
     const existingRole = existing.role || existing.user_type || "citizen";
     const incomingRole = normalizeRole(payload.role || payload.userType);
-    
-    // Role protection logic:
-    // 1. If incoming is 'citizen' but existing is specialized, KEEP existing.
-    // 2. If incoming is specialized and different from existing, UPDATE to incoming.
-    const shouldUpdateRole = incomingRole !== "citizen" && incomingRole !== existingRole;
+
+    // Role protection: a client may only set self-service roles. Admin/staff
+    // roles must be provisioned in Supabase, never self-assigned via sync.
+    const resolvedRole = resolveSelfServiceRole(incomingRole, existingRole);
+    const shouldUpdateRole = resolvedRole !== existingRole;
     
     const updateData: any = {
       last_login: new Date().toISOString(),
@@ -202,9 +196,9 @@ export async function POST(req: NextRequest) {
     };
     
     if (shouldUpdateRole) {
-      updateData.role = incomingRole;
-      updateData.user_type = getSafeUserType(incomingRole);
-      console.log("[auth/sync][POST] Updating role from", existingRole, "to", incomingRole);
+      updateData.role = resolvedRole;
+      updateData.user_type = getSafeUserType(resolvedRole);
+      console.log("[auth/sync][POST] Updating self-service role from", existingRole, "to", resolvedRole);
     }
 
     const { data: updated, error: updateError } = await supabase
@@ -231,8 +225,19 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     if (byEmail && !byEmail.firebase_uid) {
+      // Only link a pre-provisioned record when the verified token email
+      // matches. Otherwise any authenticated user could claim an admin record.
+      const callerEmail = authResult.caller?.email?.toLowerCase();
+      if (!callerEmail || callerEmail !== payload.email.toLowerCase()) {
+        return NextResponse.json(
+          { error: "Forbidden: email does not match the authenticated user" },
+          { status: 403 }
+        );
+      }
+
       const incomingRole = normalizeRole(payload.role || payload.userType);
-      const finalRole = incomingRole !== "citizen" ? incomingRole : (byEmail.role || "citizen");
+      const existingRole = byEmail.role || byEmail.user_type || "citizen";
+      const finalRole = resolveSelfServiceRole(incomingRole, existingRole);
 
       const { data: patched, error: patchError } = await supabase
         .from("users")
@@ -255,7 +260,10 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const newProfile = buildDefaultProfile(payload);
+  // New accounts may only self-assign a non-privileged role.
+  const requestedRole = normalizeRole(payload.role || payload.userType);
+  const assignedRole = SELF_SERVICE_ROLES.has(requestedRole) ? requestedRole : "citizen";
+  const newProfile = buildDefaultProfile({ ...payload, role: assignedRole, userType: assignedRole });
 
   const { data: created, error: insertError } = await supabase
     .from("users")

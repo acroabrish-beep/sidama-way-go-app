@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { DataMigrationService } from '@/lib/migration/data-migration';
 import { supabaseAdmin } from '@/lib/supabase/client';
+import { requireCaller } from '@/lib/auth/verify';
 
 export async function POST(request: NextRequest) {
+  // Destructive maintenance endpoint: always require an admin token, regardless
+  // of the AUTH_ENFORCE rollout flag.
+  const authResult = await requireCaller(request, { adminOnly: true });
+  if (!authResult.ok) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+  }
+
   try {
     const body = await request.json();
     const { action = 'migrate', table } = body;

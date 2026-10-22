@@ -338,7 +338,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ reports: data }, { status: 200 });
 }
 
-// TODO: verify admin Firebase ID tokens (separate task)
 export async function PATCH(req: NextRequest) {
   console.log("[citizen-reporting][PATCH] Updating report status");
 

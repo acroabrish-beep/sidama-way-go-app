@@ -1,4 +1,4 @@
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { initializeApp, getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { createClient } from '@supabase/supabase-js';
 import { env } from '@/lib/config/env';
@@ -95,7 +95,12 @@ export async function getCaller(req: Request): Promise<Caller | null> {
       email: decodedToken.email,
     };
   } catch (error) {
-    console.warn('[auth] Failed to verify ID token:', error);
+    // Never log the token or the raw error object; only a safe error code.
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error
+        ? String((error as { code?: unknown }).code)
+        : 'unknown';
+    console.warn(`[auth] Failed to verify ID token (code: ${code})`);
     return null;
   }
 }

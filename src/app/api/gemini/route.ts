@@ -4,8 +4,17 @@ import { supabase } from '@/lib/supabase/client';
 import { env } from '@/lib/config/env';
 import { requireCallerWithEnforce } from '@/lib/auth/verify';
 
-// Initialize Gemini AI
-const genAI = new GoogleGenerativeAI(env.geminiApiKey);
+// Initialize Gemini AI lazily so a missing key produces an honest 503
+// instead of crashing the route module at import time.
+let genAI: GoogleGenerativeAI | null = null;
+
+function getGenAI(): GoogleGenerativeAI | null {
+  if (!env.geminiApiKey) return null;
+  if (!genAI) {
+    genAI = new GoogleGenerativeAI(env.geminiApiKey);
+  }
+  return genAI;
+}
 
 export async function POST(request: NextRequest) {
   // Auth check: any valid caller
@@ -18,6 +27,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: authResult.error },
       { status: authResult.status }
+    );
+  }
+
+  const gemini = getGenAI();
+  if (!gemini) {
+    return NextResponse.json(
+      { error: 'AI service is not configured (GEMINI_API_KEY is missing).' },
+      { status: 503 }
     );
   }
 
@@ -45,7 +62,7 @@ export async function POST(request: NextRequest) {
     }));
 
     // Initialize the model with system instruction
-    const model = genAI.getGenerativeModel({ 
+    const model = gemini.getGenerativeModel({ 
       model: 'gemini-1.5-flash',
       systemInstruction: systemPrompt,
     });
@@ -68,14 +85,8 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('Gemini API Error:', error);
-    const body = await request.clone().json().catch(() => ({}));
-    const fallbackMessage = body.message || 'unknown';
-    const fallbackLanguage = body.language || 'en';
     return NextResponse.json(
-      { 
-        error: 'Failed to process AI request',
-        fallback: getFallbackResponse(fallbackMessage, fallbackLanguage),
-      },
+      { error: 'Failed to process AI request. Please try again later.' },
       { status: 500 }
     );
   }
@@ -163,10 +174,4 @@ INSTRUCTIONS:
 `;
 }
 
-function getFallbackResponse(message: string, language: string) {
-  const prefix = language === 'am'
-    ? 'ይቅርታ፣ የ AI አገልግሎት ለጊዜው አልተገኘም። እባክዎ ቆይተው ይሞክሩ።'
-    : 'I apologize, but the AI service is temporarily unavailable. Please try again later.';
-
-  return `${prefix} Your message: "${message}"`;
-}
+// (fallback removed: the client displays the backend error honestly)

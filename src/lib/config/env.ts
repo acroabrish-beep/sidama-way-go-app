@@ -21,6 +21,14 @@ export const env = {
   santimpayApiKey: process.env.SANTIMPAY_API_KEY || '',
   santimpaySecretKey: process.env.SANTIMPAY_SECRET_KEY || '',
 
+  // Station ticketing configuration. Payments remain disabled unless selected.
+  qrSigningSecret: process.env.QR_SIGNING_SECRET || '',
+  qrSigningKeyId: process.env.QR_SIGNING_KID || 'current',
+  qrSigningPreviousKeys: process.env.QR_SIGNING_PREVIOUS_KEYS || '',
+  paymentProvider: process.env.PAYMENT_PROVIDER || 'disabled',
+  paymentWebhookSecret: process.env.PAYMENT_WEBHOOK_SECRET || '',
+  appEnv: process.env.APP_ENV || 'unset',
+
   // Environment
   nodeEnv: process.env.NODE_ENV || 'development',
   isDevelopment: process.env.NODE_ENV !== 'production',
@@ -28,10 +36,11 @@ export const env = {
 };
 
 export function validateEnv() {
+  // GEMINI_API_KEY is intentionally optional: the AI route returns an honest
+  // 503 configuration error instead of preventing the whole server from booting.
   const required = [
     'supabaseUrl',
     'supabaseAnonKey',
-    'geminiApiKey',
     'firebaseProjectId',
   ];
 
