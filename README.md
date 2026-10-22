@@ -1,36 +1,81 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sidama Way Go - Backend
 
-## Getting Started
+Next.js API and business logic for the Sidama Way Go MVP. The Flutter client
+never holds privileged credentials: Firebase provides identity, Supabase is the
+system of record, and this service is the only component that talks to both
+plus Gemini.
 
-First, run the development server:
+## MVP slices
+
+| Slice | What works | Main routes |
+| --- | --- | --- |
+| S1 Citizen reports | Submit report, Gemini triage (category, urgency, English summary, language), admin list/filter/status/override, citizen sees status within 10 s | `POST/GET/PATCH /api/citizen-reporting` |
+| S2 Station tickets | Server-side tariffs, DEV payment, signed QR, PDF receipt data, one-time boarding verification, live queue/metrics | `/api/stations`, `/api/tariffs/quote`, `/api/tickets`, `/api/tickets/verify`, `/api/payments/*`, `/api/queue/*` |
+| S3 AI assistant | Read-only answers from a live DB snapshot (stations, active tariffs, queue, caller's tickets/reports), 10 s timeout | `POST /api/gemini` |
+
+Errors use HTTP status plus `{ "error": "...", "code": "..." }`. Auth is a
+Firebase ID token in `Authorization: Bearer ...`; admin routes also verify the
+caller's role in Supabase. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## Local setup
+
+1. Copy `.env.example` to `.env.local` and fill in the staging values. Never
+   commit `.env.local` or paste real values into documentation.
+2. Install and run:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The API listens on `http://localhost:3000` by default.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+All names are listed in `.env.example`. The demo depends on:
 
-## Learn More
+- `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`;
+- `FIREBASE_PROJECT_ID`;
+- `GEMINI_API_KEY`;
+- `AUTH_ENFORCE=true`;
+- `PAYMENT_PROVIDER=dev`, `APP_ENV=development` (staging only);
+- `QR_SIGNING_SECRET`, `QR_SIGNING_KID`.
 
-To learn more about Next.js, take a look at the following resources:
+The dev payment provider is additionally gated by `NODE_ENV != production`.
+Real providers must confirm payments through a signature-verified webhook; a
+client can never mark a ticket paid.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Database
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Migrations live in `public/supabase/migrations/` and are applied manually by an
+operator. They are not run by the app.
 
-## Deploy on Vercel
+Staging helpers (never migrations, never run against production):
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- `scripts/staging-test-data.sql` - creates TEST ONLY stations, a route, and
+  tariffs for rehearsals.
+- `scripts/demo-reset.sql` - deletes only rows linked to the TEST ONLY fixture.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Gates
+
+Run before committing:
+
+```bash
+npx tsc --noEmit
+npm test
+npm run build
+```
+
+## Demo and operations
+
+- [docs/DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md) - setup, acceptance script,
+  failure drills, reset.
+- [docs/DEMO_READINESS.md](docs/DEMO_READINESS.md) - what is real, what is
+  simulated, and current verification status.
+- [docs/RESPONSIBLE_AI.md](docs/RESPONSIBLE_AI.md) - triage and assistant data
+  handling and limitations.
+
+## Out of scope for this MVP
+
+Real payment rails, push notifications, release signing, and real
+hotel/pharmacy/church/food data.

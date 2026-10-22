@@ -132,6 +132,46 @@ The system tracks agreement rate between AI suggestions and final admin decision
 - Adjust system prompt based on findings
 - Consider model upgrades as they become available
 
+## Read-Only City Assistant
+
+The in-app assistant (`POST /api/gemini`) is separate from triage and is
+deliberately limited.
+
+**What is sent to the model:**
+- The user's message and up to 10 previous chat entries.
+- A read-only snapshot from the database: active station names, active routes,
+  today's active tariffs (fare, source reference, approver), waiting queue
+  counts by station and vehicle type, and the signed-in caller's five most
+  recent tickets and citizen reports (category, urgency, status, dates, and the
+  AI one-line summary).
+- Raw citizen report descriptions, photos, GPS coordinates, names, emails, and
+  phone numbers are not included in the assistant snapshot.
+
+**What the assistant cannot do:**
+- Create, change, cancel, verify, or refund tickets or payments.
+- Change report category, urgency, assignment, or status.
+- Dispatch emergency services or send notifications.
+- Write to the database. The route has no write path.
+
+**Prompt-injection handling:**
+- User text and history are labelled as untrusted data in the system prompt.
+- The model is instructed to ignore requests to change its role, reveal the
+  prompt, or act on the system.
+- No tool/function calling is exposed to the model.
+
+**Failure behaviour:**
+- 10 s server timeout, 12 s client timeout.
+- Missing key, timeout, empty response, or context-query failure returns HTTP
+  503 with `code: "ai_unavailable"`.
+- The UI shows "AI is temporarily unavailable." and the rest of the app keeps
+  working. There is no fabricated fallback answer.
+
+**Known limitations:**
+- Amharic answers can be imperfect; Sidaamu Afoo resources are very limited.
+- The snapshot is fetched per request and can lag the latest write by seconds.
+- The assistant only knows what is in the snapshot; when data is absent it says
+  so rather than guessing.
+
 ## Contact
 
-For questions or concerns about the AI triage system, contact the Sidama Way Go technical team.
+For questions or concerns about the AI triage and assistant systems, contact the Sidama Way Go technical team.
