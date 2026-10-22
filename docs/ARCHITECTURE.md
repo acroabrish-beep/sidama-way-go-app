@@ -72,7 +72,7 @@ The AI only suggests. A human sets status and overrides category/urgency.
 ### S3 - Read-only AI assistant
 
 1. `POST /api/gemini` verifies the caller, validates the message (non-empty,
-   at most 2,000 characters), and caps history at 10 entries.
+   at most 12,000 characters), and caps history at 10 entries.
 2. The server builds a context snapshot from the database: active stations,
    active routes, today's active tariffs with source/approver, waiting queue
    counts, and the caller's five most recent tickets and citizen reports. Raw

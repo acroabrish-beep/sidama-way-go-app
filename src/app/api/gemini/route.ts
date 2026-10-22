@@ -9,7 +9,7 @@ import { requireCallerWithEnforce } from '@/lib/auth/verify';
 import { apiError } from '@/lib/api/errors';
 
 const AI_TIMEOUT_MS = 10_000;
-const MAX_MESSAGE_LENGTH = 2_000;
+const MAX_MESSAGE_LENGTH = 12_000;
 const MAX_HISTORY_ENTRIES = 10;
 const UNAVAILABLE_MESSAGE = 'AI is temporarily unavailable.';
 const MODEL_NAME = 'gemini-1.5-flash';
