@@ -16,6 +16,7 @@ CREATE OR REPLACE FUNCTION st_consume_rate_limit(
 )
 RETURNS boolean
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   current_hits integer;
@@ -50,13 +51,17 @@ CREATE OR REPLACE FUNCTION st_create_tariff_version(
 )
 RETURNS uuid
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   previous_tariff st_tariffs%ROWTYPE;
   created_tariff_id uuid;
 BEGIN
   IF p_fare_etb <= 0 OR btrim(p_source_reference) = '' OR btrim(p_approved_by) = '' THEN
-    RAISE EXCEPTION 'Fare, source reference, and approver are required';
+    RAISE EXCEPTION 'Fare, source reference, and approving authority are required';
+  END IF;
+  IF btrim(COALESCE(p_created_by, '')) = '' THEN
+    RAISE EXCEPTION 'Tariff creator is required';
   END IF;
 
   PERFORM pg_advisory_xact_lock(hashtext(p_route_id::text || ':' || p_vehicle_type));
@@ -109,6 +114,7 @@ CREATE OR REPLACE FUNCTION st_queue_check_in(
 )
 RETURNS uuid
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   queue_entry_id uuid;
@@ -153,6 +159,7 @@ CREATE OR REPLACE FUNCTION st_queue_check_out(
 )
 RETURNS boolean
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   v_user_id uuid;
@@ -196,6 +203,7 @@ CREATE OR REPLACE FUNCTION st_apply_payment_event(
 )
 RETURNS text
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   payment st_payments%ROWTYPE;
@@ -380,6 +388,7 @@ CREATE OR REPLACE FUNCTION st_verify_ticket_once(
 )
 RETURNS text
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   ticket st_tickets%ROWTYPE;
@@ -459,6 +468,7 @@ CREATE OR REPLACE FUNCTION st_import_catalog(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   station_row jsonb;
@@ -542,6 +552,12 @@ BEGIN
     IF btrim(COALESCE(tariff_row->>'source_reference', '')) = '' THEN
       RAISE EXCEPTION 'Tariff source reference is required';
     END IF;
+    IF btrim(COALESCE(tariff_row->>'approved_by', '')) = '' THEN
+      RAISE EXCEPTION 'Tariff approving authority is required';
+    END IF;
+    IF btrim(COALESCE(p_actor_uid, '')) = '' THEN
+      RAISE EXCEPTION 'Tariff creator is required';
+    END IF;
     INSERT INTO st_tariffs (
       route_id, vehicle_type, fare_etb, effective_from, effective_to,
       source_reference, approved_by, created_by
@@ -551,8 +567,8 @@ BEGIN
       (tariff_row->>'fare_etb')::numeric,
       (tariff_row->>'effective_from')::date,
       NULLIF(tariff_row->>'effective_to', '')::date,
-      tariff_row->>'source_reference',
-      p_actor_uid,
+      btrim(tariff_row->>'source_reference'),
+      btrim(tariff_row->>'approved_by'),
       p_actor_uid
     )
     RETURNING id INTO tariff_identifier;
@@ -590,6 +606,7 @@ CREATE OR REPLACE FUNCTION st_create_pending_ticket(
 )
 RETURNS jsonb
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   existing_payment st_payments%ROWTYPE;

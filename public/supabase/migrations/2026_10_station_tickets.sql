@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS st_tariffs (
   effective_to date,
   source_reference text NOT NULL,
   approved_by text NOT NULL,
-  created_by text,
+  created_by text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT st_tariffs_valid_period CHECK (effective_to IS NULL OR effective_to > effective_from)
 );
@@ -55,6 +55,7 @@ $$;
 CREATE OR REPLACE FUNCTION st_prevent_tariff_history_rewrite()
 RETURNS trigger
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 BEGIN
   IF OLD.effective_to IS NOT NULL
@@ -79,6 +80,9 @@ DROP TRIGGER IF EXISTS st_tariffs_history_immutable ON st_tariffs;
 CREATE TRIGGER st_tariffs_history_immutable
   BEFORE UPDATE ON st_tariffs
   FOR EACH ROW EXECUTE FUNCTION st_prevent_tariff_history_rewrite();
+
+REVOKE ALL ON FUNCTION st_prevent_tariff_history_rewrite() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION st_prevent_tariff_history_rewrite() TO service_role;
 
 CREATE TABLE IF NOT EXISTS st_queue (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

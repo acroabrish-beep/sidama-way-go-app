@@ -14,6 +14,7 @@ type TariffRow = {
   effective_from: string;
   effective_to: string;
   source_reference: string;
+  approved_by: string;
 };
 
 const VEHICLE_TYPES = new Set(['taxi', 'bajaj', 'minibus']);
@@ -161,8 +162,8 @@ export async function POST(request: Request) {
       errors.push(`tariffs row ${index + 2}: source_reference is required`);
       continue;
     }
-    if (row.approved_by?.trim() !== authorization.caller.uid) {
-      errors.push(`tariffs row ${index + 2}: approved_by must match the authenticated admin`);
+    if (!row.approved_by?.trim()) {
+      errors.push(`tariffs row ${index + 2}: approved_by (approving authority) is required`);
       continue;
     }
     const key = `${routeKey(from, to)}\u0000${row.vehicle_type}`;
@@ -180,6 +181,7 @@ export async function POST(request: Request) {
       effective_from: start,
       effective_to: end,
       source_reference: row.source_reference.trim(),
+      approved_by: row.approved_by.trim(),
     });
   }
 

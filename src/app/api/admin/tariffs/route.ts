@@ -44,21 +44,27 @@ export async function POST(request: Request) {
     typeof values.effectiveFrom !== 'string' ||
     !/^\d{4}-\d{2}-\d{2}$/.test(values.effectiveFrom) ||
     typeof values.sourceReference !== 'string' ||
-    !values.sourceReference.trim()
+    !values.sourceReference.trim() ||
+    typeof values.approvedBy !== 'string' ||
+    !values.approvedBy.trim()
   ) {
     return NextResponse.json(
-      { error: 'routeId, vehicleType, positive fareEtb, effectiveFrom, and sourceReference are required' },
+      {
+        error:
+          'routeId, vehicleType, positive fareEtb, effectiveFrom, sourceReference, and approvedBy are required',
+      },
       { status: 400 },
     );
   }
 
+  const approvedBy = values.approvedBy.trim();
   const { data: tariffId, error } = await authorization.db.rpc('st_create_tariff_version', {
     p_route_id: values.routeId,
     p_vehicle_type: values.vehicleType,
     p_fare_etb: fareEtb,
     p_effective_from: values.effectiveFrom,
     p_source_reference: values.sourceReference.trim(),
-    p_approved_by: authorization.caller.uid,
+    p_approved_by: approvedBy,
     p_created_by: authorization.caller.uid,
   });
   if (error) {
@@ -72,11 +78,19 @@ export async function POST(request: Request) {
       'tariff_created',
       'tariff',
       String(tariffId),
-      { routeId: values.routeId, vehicleType: values.vehicleType, effectiveFrom: values.effectiveFrom },
+      {
+        routeId: values.routeId,
+        vehicleType: values.vehicleType,
+        effectiveFrom: values.effectiveFrom,
+        approvedBy,
+      },
     );
   } catch {
     return NextResponse.json({ error: 'Tariff created but audit write failed; investigate before retrying' }, { status: 503 });
   }
 
-  return NextResponse.json({ tariffId, approvedBy: authorization.caller.uid }, { status: 201 });
+  return NextResponse.json(
+    { tariffId, approvedBy, createdBy: authorization.caller.uid },
+    { status: 201 },
+  );
 }

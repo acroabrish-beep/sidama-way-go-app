@@ -69,3 +69,79 @@ test('ticket creation does not accept a fare from the request body', () => {
   assert.doesNotMatch(route, /values\.(fare|fareEtb|amount)/);
   assert.match(route, /p_fare_etb: Number\(tariff\.fare_etb\)/);
 });
+
+test('approved_by is the approving authority and created_by is the verified admin', () => {
+  const tariffRoute = readFileSync(
+    new URL('../../src/app/api/admin/tariffs/route.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(tariffRoute, /approvedBy/);
+  assert.match(tariffRoute, /p_approved_by: approvedBy/);
+  assert.match(tariffRoute, /p_created_by: authorization\.caller\.uid/);
+  assert.doesNotMatch(tariffRoute, /p_approved_by: authorization\.caller\.uid/);
+
+  const importRoute = readFileSync(
+    new URL('../../src/app/api/admin/import/route.ts', import.meta.url),
+    'utf8',
+  );
+  assert.match(importRoute, /approved_by: row\.approved_by\.trim\(\)/);
+  assert.doesNotMatch(importRoute, /approved_by.*caller\.uid/);
+
+  assert.match(schema, /created_by text NOT NULL/);
+  assert.match(operations, /btrim\(tariff_row->>'approved_by'\),\s*p_actor_uid/);
+  assert.doesNotMatch(operations, /p_actor_uid,\s*p_actor_uid/);
+  assert.match(operations, /Tariff approving authority is required/);
+});
+
+test('every st_ table has RLS enabled and no anon/authenticated policy', () => {
+  const combined = `${schema}\n${operations}`;
+  for (const table of [
+    'st_stations',
+    'st_routes',
+    'st_tariffs',
+    'st_queue',
+    'st_tickets',
+    'st_payments',
+    'st_audit',
+    'st_rate_limits',
+  ]) {
+    assert.match(
+      combined,
+      new RegExp(`ALTER TABLE ${table} ENABLE ROW LEVEL SECURITY;`),
+      table,
+    );
+  }
+  assert.doesNotMatch(
+    combined,
+    /CREATE POLICY[^;]*TO\s+(anon|authenticated)\b/,
+  );
+});
+
+test('st_ functions are executable only by service_role with a fixed search_path', () => {
+  const combined = `${schema}\n${operations}`;
+  const signatures = [
+    'st_prevent_tariff_history_rewrite()',
+    'st_consume_rate_limit(text, integer, integer)',
+    'st_create_tariff_version(uuid, text, numeric, date, text, text, text)',
+    'st_queue_check_in(uuid, uuid, text, text)',
+    'st_queue_check_out(uuid, text)',
+    'st_apply_payment_event(uuid, text, text, numeric, text, jsonb)',
+    'st_verify_ticket_once(uuid, text, uuid)',
+    'st_import_catalog(jsonb, jsonb, jsonb, text)',
+    'st_create_pending_ticket(text, text, uuid, uuid, text, numeric, timestamptz, text, text)',
+  ];
+  for (const signature of signatures) {
+    assert.ok(
+      combined.includes(
+        `REVOKE ALL ON FUNCTION ${signature} FROM PUBLIC, anon, authenticated;`,
+      ),
+      `missing revoke for ${signature}`,
+    );
+    assert.ok(
+      combined.includes(`GRANT EXECUTE ON FUNCTION ${signature} TO service_role;`),
+      `missing grant for ${signature}`,
+    );
+  }
+  assert.equal((combined.match(/SET search_path = public/g) ?? []).length, signatures.length);
+  assert.doesNotMatch(combined, /SECURITY DEFINER/);
+});
