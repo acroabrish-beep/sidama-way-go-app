@@ -1,0 +1,136 @@
+-- ============================================================================
+-- PRE-CHANGE SNAPSHOT / MANUAL ROLLBACK NOTES
+-- Gate B legacy reconciliation
+-- Captured: 2026-10-24, before applying
+--   supabase/proposals/20261024_gate_b_legacy_reconciliation.proposed.sql
+-- ============================================================================
+--
+-- This is NOT a migration and must not be run automatically. It records the
+-- exact pre-change policies and grants so a rollback can be reviewed safely.
+--
+-- WARNING: restoring the old users policies reintroduces auth.uid()-based
+-- checks that do not work with Supabase third-party Firebase authentication.
+-- Prefer the forward migration's firebase_uid-based policies. Restore the old
+-- policies only if the application genuinely depends on them.
+--
+-- PRE-CHANGE RLS
+--   users:            enabled, not forced
+--   citizen_reports:  enabled, not forced
+--
+-- PRE-CHANGE POLICIES
+--   users_insert_own
+--     INSERT, roles {public}, with check (auth.uid() = id)
+--   users_select_own
+--     SELECT, roles {public},
+--     using ((auth.uid() = id) OR ((auth.jwt() ->> 'role') = 'admin'))
+--   users_update_own
+--     UPDATE, roles {public},
+--     using ((auth.uid() = id) OR ((auth.jwt() ->> 'role') = 'admin'))
+--   "Service role can manage citizen reports"
+--     ALL, roles {public}, using (auth.role() = 'service_role')
+--
+-- PRE-CHANGE TABLE ACLS (pg_class.relacl)
+--   users:
+--     postgres=arwdDxtm/postgres
+--     service_role=arwdDxtm/postgres
+--     authenticated=ar/postgres
+--   citizen_reports:
+--     postgres=arwdDxtm/postgres
+--     anon=arwdDxtm/postgres
+--     authenticated=arwdDxtm/postgres
+--     service_role=arwdDxtm/postgres
+--
+-- PRE-CHANGE COLUMN-LEVEL GRANTS
+--   authenticated users UPDATE on:
+--     address, avatar_url, city, email, first_name, full_name,
+--     language, last_name, phone, photo
+--   No other column-level grants existed.
+--
+-- PRE-CHANGE OTHER OBJECTS
+--   No app_private schema.
+--   No app_private.current_firebase_uid().
+--   No app_private.is_citizen_report_staff().
+--   No public.sync_user_profile(...).
+--   No AI/final columns on public.citizen_reports.
+--   Trigger citizen_reports_set_updated_at is enabled.
+--   Row counts: users 17 (14 citizen, 2 admin, 1 taxi),
+--               citizen_reports 1 (pending).
+--   Users without firebase_uid: 0.
+--
+-- ============================================================================
+-- CLEAN ROLLBACK (comment-only; review before executing)
+-- ============================================================================
+--
+-- begin;
+--
+-- -- Remove the forward migration's RLS policies.
+-- drop policy if exists users_select_self_firebase on public.users;
+-- drop policy if exists users_update_self_firebase on public.users;
+-- drop policy if exists citizen_reports_select_own_or_staff
+--   on public.citizen_reports;
+-- drop policy if exists citizen_reports_insert_own
+--   on public.citizen_reports;
+-- drop policy if exists citizen_reports_update_staff
+--   on public.citizen_reports;
+--
+-- -- Remove the forward migration's functions and schema.
+-- drop function if exists public.sync_user_profile(
+--   text, text, boolean, text, text, text
+-- );
+-- drop function if exists app_private.is_citizen_report_staff();
+-- drop function if exists app_private.current_firebase_uid();
+-- drop schema if exists app_private;
+--
+-- -- Restore the old users policies.
+-- create policy users_insert_own
+-- on public.users for insert to public
+-- with check (auth.uid() = id);
+--
+-- create policy users_select_own
+-- on public.users for select to public
+-- using (
+--   auth.uid() = id
+--   or (auth.jwt() ->> 'role') = 'admin'
+-- );
+--
+-- create policy users_update_own
+-- on public.users for update to public
+-- using (
+--   auth.uid() = id
+--   or (auth.jwt() ->> 'role') = 'admin'
+-- );
+--
+-- -- Remove the forward migration's table-level and column-level grants.
+-- revoke all on table public.users from public, anon, authenticated;
+-- revoke select (
+--   id, firebase_uid, email, full_name, phone, avatar_url, role, status,
+--   language, department, last_login, created_at, updated_at
+-- ) on table public.users from authenticated;
+-- revoke update (
+--   full_name, phone, avatar_url
+-- ) on table public.users from authenticated;
+--
+-- revoke all on table public.citizen_reports from public, anon, authenticated;
+-- revoke select on table public.citizen_reports from authenticated;
+-- revoke insert (
+--   reporter_firebase_uid, category, description, photo_url, latitude, longitude
+-- ) on table public.citizen_reports from authenticated;
+-- revoke update (
+--   status, final_category, final_urgency, assigned_at, resolved_at
+-- ) on table public.citizen_reports from authenticated;
+--
+-- -- Restore the old table and column grants.
+-- grant insert, select on table public.users to authenticated;
+-- grant update (
+--   address, avatar_url, city, email, first_name, full_name,
+--   language, last_name, phone, photo
+-- ) on table public.users to authenticated;
+-- grant all on table public.citizen_reports to anon, authenticated;
+--
+-- notify pgrst, 'reload schema';
+-- commit;
+--
+-- The AI/final columns and the three polling indexes are additive. Leaving them
+-- in place is safer than dropping data. Drop them manually only after
+-- confirming they are empty and no server-side triage is writing to them.
+-- ============================================================================
