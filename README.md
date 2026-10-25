@@ -48,13 +48,24 @@ client can never mark a ticket paid.
 ## Database
 
 Migrations live in `public/supabase/migrations/` and are applied manually by an
-operator. They are not run by the app.
+operator. They are not run by the app. This includes
+`2026_10_healthcare.sql`, which adds `healthcare_doctors` and
+`healthcare_appointments` and reuses the existing `healthcare_facilities`
+table. It was applied to staging on 2026-10-25.
 
 Staging helpers (never migrations, never run against production):
 
 - `scripts/staging-test-data.sql` - creates TEST ONLY stations, a route, and
   tariffs for rehearsals.
 - `scripts/demo-reset.sql` - deletes only rows linked to the TEST ONLY fixture.
+- `public/supabase/seed_healthcare_demo.sql` - optional sample healthcare data
+  for staging: three facilities and seven doctors, every name suffixed
+  `(Sample)`, `verified = false`, and no appointments. It is idempotent and
+  safe to re-run. Never run it against production.
+
+The Flutter client reads these tables directly as an authenticated user; RLS
+allows patients to book and read only their own appointments, and healthcare
+staff to manage doctors and decisions.
 
 ## Gates
 

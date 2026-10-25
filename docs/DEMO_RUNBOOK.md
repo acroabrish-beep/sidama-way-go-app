@@ -16,9 +16,14 @@ Staging only. Do not point any of this at production.
    applied (from `public/supabase/migrations/`):
    - `2026_10_station_tickets.sql`
    - `2026_10_citizen_reports_ai.sql`
+   - `2026_10_healthcare.sql` - only needed for the healthcare screen, which is
+     hidden when `MVP_MODE=true`; not part of the S1-S3 acceptance script.
 2. The TEST ONLY fixture applied once: `scripts/staging-test-data.sql`.
    It creates two stations, one route, and taxi/bajaj/minibus tariffs, all
    labelled TEST ONLY.
+   Optionally, for the healthcare screen, run
+   `public/supabase/seed_healthcare_demo.sql` (idempotent, sample facilities and
+   doctors only, no appointments).
 3. Firebase staging project with:
    - a citizen test user;
    - an admin test user whose `users.role` in Supabase is an admin role
